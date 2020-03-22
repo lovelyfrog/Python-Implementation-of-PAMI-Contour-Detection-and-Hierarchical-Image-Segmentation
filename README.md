@@ -3,11 +3,13 @@ This is a python implementation of "Contour Detection and Hierarchical Image Seg
 It has not been finished, still in construction.
 
 Completed:
+
 	* Parts of lib_image
 
 	* gradient of mPb
 
-To be done: 
+To be done:
+ 
 	* multiscale Pb
 
 	* Globalization
