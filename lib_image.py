@@ -370,7 +370,6 @@ def quantize_values(m, n_bins):
             if (bin == n_bins):
                 bin = n_bins - 1
             assign[i][j] = bin
-
     return assign
 
 def texton_filters(n_orient, sigma):
@@ -471,5 +470,197 @@ def hist_gradient_2D(labels, radius, n_orient, smoothing_kernel=None):
     """
     Compute the distance between histograms of label values in oriented half-dics
     of the specified radius centered at each location in the 2D matrix. Return one
-    distance matrix per orientation
+    distance matrix per orientation.
+
+    The half-disc orientations are k*pi/n for k in [0,n) where n is the number
+    of orientation requested. 
+
+    The user may opptionally specify a nonempty 1D smoothing kernel to convolve with
+    histograms prior to computing the distance between them.
     """
+    # compute weight matrix for circular disc
+    weights = weight_matrix_disc(radius)
+
+    # check arguments: labels 
+    if (len(labels.shape) != 2):
+        raise ValueError("labels matrix must be 2D")
+
+    # check orientations
+    if (n_orient == 0):
+        raise ValueError("n_orient must > 0")
+
+    # build orientation slice lookup map
+    slice_map = orientation_slice_map(weights.shape[0], weights.shape[1], n_orient)
+
+    # compute histograms and histogram difference at each location
+    gradients = compute_hist_gradient_2D(labels, weights, n_orient, slice_map, smoothing_kernel, x2_distance)
+    return gradients
+
+def compute_hist_gradient_2D(labels, weights, n_orient, slice_map, smoothing_kernel, f_dist):
+    """
+    compute histograms and histogram difference at each location
+    """
+    # initialize gradients
+    gradients = []
+    for i in range(n_orient):
+        gradients.append(np.zeros_like(labels))
+
+    labels = labels.astype(int)
+
+    # histograms of each slice
+    hist_length = np.max(labels.astype(int)) + 1
+    slice_hist_dims = np.zeros([1, hist_length])
+    slice_hist = []
+    for i in range(2*n_orient):
+        slice_hist.append(np.zeros_like(slice_hist_dims))
+
+    temp_conv = np.zeros_like(slice_hist_dims)
+    
+    # allocate half disc histograms
+    hist_left = np.zeros_like(slice_hist_dims)
+    hist_right = np.zeros_like(slice_hist_dims)
+
+    # get labels matrix size
+    size_labels_x, size_labels_y = labels.shape
+
+    # get weights size
+    size_weights_x, size_weights_y = weights.shape
+
+    # set start position for gradient matrices
+    pos_start_x = size_weights_x // 2
+    pos_start_y = size_weights_y // 2
+    pos_bound_y = pos_start_y + size_labels_y
+
+    # initialize position in result
+    pos_x = pos_start_x
+    pos_y = pos_start_y
+
+    # compute initial range of offset_x
+    offset_min_x = pos_x + 1 - size_labels_x if (pos_x + 1 - size_labels_x > 0) else 0
+    offset_max_x = pos_x if (pos_x - size_weights_x < 0) else size_weights_x - 1
+    ind_labels_start_x = (pos_x - offset_min_x) * size_labels_y
+    ind_weights_start_x = (offset_min_x) * size_weights_y
+
+    for i in range(labels.shape[0]):
+        for j in range(labels.shape[1]):
+            # compute range of offset_y
+            offset_min_y = pos_y + 1 - size_labels_y if (pos_y + 1 - size_labels_y > 0) else 0
+            offset_max_y = pos_y if (pos_y < size_weights_y) else size_weights_y - 1
+            offset_range_y = offset_max_y - offset_min_y
+
+            # intialize indices
+            index_labels = ind_labels_start_x + (pos_y - offset_min_y)
+            index_weights = ind_weights_start_x + offset_min_y
+
+            # clear histograms
+            for m in range(2*n_orient):
+                slice_hist[m].fill(0)
+
+            # update histograms
+            for o_x in range(offset_min_x, offset_max_x+1):
+                for o_y in range(offset_min_y, offset_max_y):
+                    (slice_hist[get_value_by_index(slice_map, index_weights)])[0, get_value_by_index(labels, index_labels)] += get_value_by_index(weights, index_weights)
+
+                    index_labels -= 1
+                    index_weights += 1
+                # update last histogram value
+                (slice_hist[get_value_by_index(slice_map, index_weights)])[0, get_value_by_index(labels, index_labels)] += get_value_by_index(weights, index_weights)
+                index_labels = index_labels + offset_range_y - size_labels_y
+                index_weights = index_weights - offset_range_y + size_weights_y
+                
+            # smooth bins                 
+
+            # L1 normalize bins
+            for o in range(0, 2*n_orient):
+                sum_slice_hist = np.sum(slice_hist[o]).astype(int)
+                if (sum_slice_hist != 0):
+                    slice_hist[o] /= sum_slice_hist
+
+            # compute circular gradients: initialize histograms
+            hist_left.fill(0)
+            hist_right.fill(0)
+            for o in range(0, n_orient):
+                hist_left += slice_hist[o]
+                hist_right += slice_hist[o+n_orient]
+
+            # compute circular gradients: spin the disc
+            for o in range(0, n_orient):
+                (gradients[o])[i][j] = f_dist(hist_left, hist_right)
+                hist_left -= slice_hist[o]
+                hist_left += slice_hist[o+n_orient]
+                hist_right += slice_hist[o]
+                hist_right -= slice_hist[o+n_orient]
+
+            # update position
+            pos_y += 1
+            if (pos_y == pos_bound_y):
+                # reset y position, increment x position
+                pos_y = pos_start_y
+                pos_x += 1
+                # update range of offset_x
+                offset_min_x = pos_x + 1 - size_labels_x if (pos_x + 1 - size_labels_x > 0) else 0
+                offset_max_x = pos_x if (pos_x < size_weights_x) else size_weights_x - 1
+                ind_labels_start_x = (pos_x - offset_min_x) * size_labels_y
+                ind_weights_start_x = (offset_min_x) * size_weights_y
+
+    return gradients
+
+def x2_distance(hist_left, hist_right):
+    """
+    Compute histogram distance
+    """
+    dist = 0
+    for i in range(hist_left.shape[1]):
+        diff = hist_left[0, i] - hist_right[0, i]
+        summ = hist_left[0, i] + hist_right[0, i]
+        if (diff != 0):
+            dist += diff**2 / summ
+    return dist / 2
+
+def get_value_by_index(array, index):
+    size_x, size_y = array.shape
+    x_index = index // size_y
+    y_index = index % size_y
+    return array[x_index][y_index]
+
+def orientation_slice_map(size_x, size_y, n_orient):
+    """
+    Construct orientation slice lookup map
+    """
+    slice_map = np.zeros([size_x, size_y])
+
+    # compute orientation of each element from center
+    x = -size_x / 2
+    for nx in range(size_x):
+        y = -size_y / 2
+        for ny in range(size_y):
+            # compute orientation index
+            orient = np.arctan2(y, x) + np.pi
+            index = np.floor(orient / np.pi * n_orient).astype(int)
+            if (index >= 2*n_orient):
+                index = 2*n_orient - 1
+            slice_map[nx][ny] = index
+            y += 1
+        x += 1
+
+    slice_map = slice_map.astype(int)
+    return slice_map
+
+def weight_matrix_disc(radius):
+    """
+    Construct weight matrix for circular disc of the given radius.
+    """
+    # initialize matrix
+    size = 2*radius + 1
+    weights = np.zeros([size, size])
+    center = radius
+    r_sq = radius**2
+
+    # set values in disc to 1
+    for i in range(size):
+        for j in range(size):
+            if (i - center)**2 + (j - center)**2 <= r_sq:
+                weights[i][j] = 1
+    
+    return weights
+    

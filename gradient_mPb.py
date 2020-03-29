@@ -54,9 +54,9 @@ def gradient_mPb(im):
 
     # quantize color channels
     print("quantize color channels")
-    Lq = lib_image.quantize_values(L, num_L_bins)
-    aq = lib_image.quantize_values(a, num_a_bins)
-    bq = lib_image.quantize_values(b, num_b_bins)
+    Lq = lib_image.quantize_values(L, num_L_bins).astype(int)
+    aq = lib_image.quantize_values(a, num_a_bins).astype(int)
+    bq = lib_image.quantize_values(b, num_b_bins).astype(int)
 
     # compute texton filter set
     print("computing filter set for textons")
@@ -78,6 +78,8 @@ def gradient_mPb(im):
         # compute bg
         print("computing bg, r=", radius)
         bgs = lib_image.hist_gradient_2D(Lq, radius, num_orient, bg_smooth_kernel)
+        for i in range(len(bgs)):
+            bgs[i] = border_trim_2D(bgs[i], border)
         plhs.append(bgs)
 
     # compute cga at each radius
@@ -85,6 +87,8 @@ def gradient_mPb(im):
         # compute cga
         print("computing cga, r=", radius)
         cgs_a = lib_image.hist_gradient_2D(aq, radius, num_orient, cga_smooth_kernel)
+        for i in range(len(cgs_a)):
+            cgs_a[i] = border_trim_2D(cgs_a[i], border)
         plhs.append(cgs_a)
 
     # compute cgb at each radius
@@ -92,12 +96,16 @@ def gradient_mPb(im):
         # compute cgb
         print("computing cgb, r=", radius)
         cgs_b = lib_image.hist_gradient_2D(bq, radius, num_orient, cgb_smooth_kernel)
+        for i in range(len(cgs_b)):
+            cgs_b[i] = border_trim_2D(cgs_b[i], border)
         plhs.append(cgs_b)
     # compute tg at each radius
     for radius in tg_radius:
         # compute tg
         print("computing tg, r=", radius)
         tgs = lib_image.hist_gradient_2D(t_assign, radius, num_orient)
+        for i in range(len(tgs)):
+            tgs[i] = border_trim_2D(tgs[i], border)
         plhs.append(tgs)
         
     return plhs
@@ -107,5 +115,6 @@ im = np.array(im)
 im = im / 255
 print(im.shape)
 
-# plhs = gradients_mPb(im)
-# print(plhs[0].shape)
+
+plhs = gradient_mPb(im)
+print(plhs)
