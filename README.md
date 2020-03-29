@@ -8,14 +8,14 @@ Completed:
 
 	* gradient of mPb
 
-To be done:
- 
 	* multiscale Pb
 
-	* Globalization
+To be done:
+
+	* Globalization (half finished)
 
 	* Oriented Watershed Transform
 
 	* Ultrametric Contour Map
 
-(Updated on 03.22 2020) 
+(Updated on 03.29 2020) 
