@@ -113,15 +113,5 @@ def fitparab(z, ra, rb, theta, ft):
 def savagol_border(a, z, ra, rb, theta):
     return None
 
-im = Image.open('101087.jpg')
 
-im = np.array(im)
-
-# scale im from 0-255 to 0-1
-im = im / 255
-tx, ty, nchan = im.shape
-orig_sz = [tx, ty] 
-
-# resize factor in (0, 1], to speed up eigenvector computation
-rsz = 1
 
