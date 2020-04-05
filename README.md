@@ -10,12 +10,13 @@ Completed:
 
 	* multiscale Pb
 
+	* Globalization
+
 To be done:
 
-	* Globalization (half finished)
 
 	* Oriented Watershed Transform
 
 	* Ultrametric Contour Map
 
-(Updated on 03.29 2020) 
+(Updated on 04.05 2020) 
